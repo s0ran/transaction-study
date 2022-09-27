@@ -11,5 +11,7 @@ services:
       - SYS_NICE  
     volumes:
       - ./db.mysql:/var/lib/mysql
+      - ./schema:/docker-entrypoint-initdb.d
+      - ./data:/var/lib/mysql-files
     env_file:
       - .env.development

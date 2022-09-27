@@ -1,0 +1,13 @@
+SET CHARACTER_SET_CLIENT = utf8;
+SET CHARACTER_SET_CONNECTION = utf8;
+
+DROP TABLE IF EXISTS `albums`;
+CREATE TABLE `albums` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `title` TEXT NOT NULL,
+    `artist` TEXT NOT NULL,
+    `price` NUMERIC(4,2) NOT NULL DEFAULT 0.00,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+LOAD DATA INFILE '/var/lib/mysql-files/dummy_data.csv' INTO TABLE `albums` FIELDS TERMINATED BY ',' ENCLOSED BY '"' LINES TERMINATED BY '\n';

@@ -12,13 +12,16 @@ build:
 	docker-compose -f docker-compose.development.yml build
 
 debug-build:
-	docker-compose -f docker-compose.development.yml build --no-cache --progress=plain
+	docker-compose -f docker-compose.development.yml build --no-cache --progress=plain 
 
 up:
 	docker-compose -f docker-compose.development.yml up
 
 up-d:
 	docker-compose -f docker-compose.development.yml up -d
+
+re-up:
+	docker-compose -f docker-compose.development.yml up --force-recreate --renew-anon-volumes --remove-orphans --always-recreate-deps 
 
 down:
 	docker-compose -f docker-compose.development.yml down
@@ -30,4 +33,4 @@ dbshell:
 	docker-compose -f docker-compose.development.yml exec db bash
 
 mysql:
-	docker-compose -f docker-compose.development.yml exec db mysql -u test -p test test-db
+	docker-compose -f docker-compose.development.yml exec db mysql -utest -ptest transaction-db
