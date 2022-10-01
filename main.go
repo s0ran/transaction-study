@@ -1,10 +1,40 @@
 package main
 
 import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+
+	_ "github.com/go-sql-driver/mysql"
 )
+
+func formatDSN() string {
+	err := godotenv.Load(".env.development")
+	if err != nil {
+		log.Fatal("Error loading .env.development file")
+	}
+	dbUser := os.Getenv("MYSQL_USER")
+	dbPass := os.Getenv("MYSQL_PASSWORD")
+	dbHost := "localhost"
+	dbPort := "3306"
+	dbName := os.Getenv("MYSQL_DATABASE")
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", dbUser, dbPass, dbHost, dbPort, dbName)
+}
+
+func NewDB() *sql.DB {
+	db, err := sql.Open("mysql", formatDSN())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return db
+}
 
 // album represents data about a record album.
 type album struct {
@@ -14,41 +44,66 @@ type album struct {
 	Price  float64 `json:"price"`
 }
 
-// albums slice to seed record album data.
-var albums = []album{
-	{ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-	{ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-	{ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
+type albumDB struct {
+	db *sql.DB
 }
 
-func main() {
-	router := gin.Default()
-	router.GET("/albums", getAlbums)
-	router.GET("/albums/:id", getAlbumByID)
-	router.POST("/albums", postAlbums)
-	router.Run("localhost:8080")
-}
-
-func getAlbums(c *gin.Context) {
+func (albumdb albumDB) getAlbums(c *gin.Context) {
+	var albums []album
+	rows, err := albumdb.db.Query("SELECT * FROM albums")
+	defer rows.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for rows.Next() {
+		newAlbum := album{}
+		rows.Scan(&newAlbum.ID, &newAlbum.Title, &newAlbum.Artist, &newAlbum.Price)
+		albums = append(albums, newAlbum)
+	}
 	c.IndentedJSON(http.StatusOK, albums)
 }
 
-func postAlbums(c *gin.Context) {
-	var newAlbum album
-	if err := c.BindJSON(&newAlbum); err != nil {
+func (albumdb albumDB) getAlbumByID(c *gin.Context) {
+	id := c.Param("id")
+	row := albumdb.db.QueryRow("SELECT * FROM albums WHERE id = ?", id)
+	if row == nil {
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
 		return
 	}
-	albums = append(albums, newAlbum)
+	newAlbum := album{}
+	row.Scan(&newAlbum.ID, &newAlbum.Title, &newAlbum.Artist, &newAlbum.Price)
+	c.IndentedJSON(http.StatusOK, newAlbum)
+}
+
+func (albumdb albumDB) postAlbums(c *gin.Context) {
+	var newAlbum album
+	if err := c.BindJSON(&newAlbum); err != nil {
+		log.Fatal(err)
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "bad request"})
+		return
+	}
+	row := albumdb.db.QueryRow("INSERT INTO albums (id, title, artist, price) VALUES (?, ?, ?, ?)", newAlbum.ID, newAlbum.Title, newAlbum.Artist, newAlbum.Price)
+	if row == nil {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "bad request"})
+		return
+	}
+	row.Scan(&newAlbum.ID, &newAlbum.Title, &newAlbum.Artist, &newAlbum.Price)
 	c.IndentedJSON(http.StatusCreated, newAlbum)
 }
 
-func getAlbumByID(c *gin.Context) {
-	id := c.Param("id")
-	for _, a := range albums {
-		if a.ID == id {
-			c.IndentedJSON(http.StatusOK, a)
-			return
-		}
+// albums slice to seed record album data.
+func main() {
+	db := NewDB()
+	defer db.Close()
+	if err := db.PingContext(context.Background()); err != nil {
+		log.Printf("failed to ping err = %s", err.Error())
+		return
 	}
-	c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
+
+	albumdb := albumDB{db: db}
+	router := gin.Default()
+	router.GET("/albums", albumdb.getAlbums)
+	router.GET("/albums/:id", albumdb.getAlbumByID)
+	router.POST("/albums", albumdb.postAlbums)
+	router.Run("localhost:8080")
 }
